@@ -1,57 +1,52 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const cors = require('cors');
 const clickController = require('./click.controller');
-const db = require('./db');
+const config = require('./config');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
+app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// 1. Mahsulotlarni olish
-app.get('/api/products', (req, res) => {
-    res.json(db.products);
-});
-
-// 2. Buyurtma yaratish (Foydalanuvchi mahsulot sotib olmoqchi bo'lganda)
-app.post('/api/orders', (req, res) => {
-    const { product_id, user_id } = req.body;
-
-    const product = db.products.find(p => p.id == product_id);
-    if (!product) {
-        return res.status(404).json({ error: "Product not found" });
-    }
-
-    const newOrder = {
-        id: db.orders.length + 1, // Oddiy ID generatsiya
-        product_id: product.id,
-        amount: product.price,
-        status: 'waiting',
-        user_id: user_id || 1,
-        created_at: new Date()
-    };
-
-    db.orders.push(newOrder);
-
-    res.json({
-        message: "Order created",
-        order: newOrder,
-        // Click uchun to'lov linkini generatsiya qilish mumkin shu yerda
-        // click_url: `https://my.click.uz/services/pay?service_id=...&merchant_id=...&amount=${product.price}&transaction_param=${newOrder.id}`
+// Health check
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        service: 'click-payments',
+        timestamp: new Date().toISOString()
     });
 });
 
-// 3. Click Prepare Endpoint
+// API info
+app.get('/api/info', (req, res) => {
+    res.json({
+        name: 'EduCRM Click Payment Service',
+        version: '1.0.0',
+        description: 'Click to\'lov integratsiyasi',
+        endpoints: {
+            prepare: '/api/click/prepare',
+            complete: '/api/click/complete'
+        }
+    });
+});
+
+// Click Prepare Endpoint - To'lovni tayyorlash
 app.post('/api/click/prepare', clickController.prepare);
 
-// 4. Click Complete Endpoint
+// Click Complete Endpoint - To'lovni yakunlash
 app.post('/api/click/complete', clickController.complete);
+
+// To'lov holati tekshirish
+app.get('/api/payments/:paymentId/status', clickController.checkStatus);
 
 // Serverni ishga tushirish
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-    console.log(`Click Prepare URL: http://localhost:${PORT}/api/click/prepare`);
-    console.log(`Click Complete URL: http://localhost:${PORT}/api/click/complete`);
+    console.log(`🚀 Click Payment Server is running on port ${PORT}`);
+    console.log(`📍 Click Prepare URL: http://localhost:${PORT}/api/click/prepare`);
+    console.log(`📍 Click Complete URL: http://localhost:${PORT}/api/click/complete`);
+    console.log(`📍 EduCRM Backend URL: ${config.EDUCRM_BACKEND_URL}`);
 });
